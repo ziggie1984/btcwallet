@@ -30,4 +30,6 @@ require (
 	google.golang.org/grpc v1.18.0
 )
 
+replace github.com/btcsuite/btcwallet/wallet/txauthor => ./wallet/txauthor
+
 go 1.16

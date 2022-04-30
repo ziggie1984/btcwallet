@@ -93,10 +93,18 @@ type ChangeSource struct {
 func NewUnsignedTransaction(outputs []*wire.TxOut, feeRatePerKb btcutil.Amount,
 	fetchInputs InputSource, changeSource *ChangeSource) (*AuthoredTx, error) {
 
+	//First try with without change
+	withoutChangeOutput := true
+	var prevInputCount int = 0
+
+	//We try first Size of with a P2WKH input and check
+	//whether we do not need to account for a change address
+
 	targetAmount := SumOutputValues(outputs)
 	estimatedSize := txsizes.EstimateVirtualSize(
-		0, 1, 0, outputs, changeSource.ScriptSize,
+		0, 1, 0, outputs, 0,
 	)
+
 	targetFee := txrules.FeeForSerializeSize(feeRatePerKb, estimatedSize)
 
 	for {
@@ -123,10 +131,24 @@ func NewUnsignedTransaction(outputs []*wire.TxOut, feeRatePerKb btcutil.Amount,
 				p2pkh++
 			}
 		}
+		var maxSignedSize int = 0
 
-		maxSignedSize := txsizes.EstimateVirtualSize(
-			p2pkh, p2wpkh, nested, outputs, changeSource.ScriptSize,
-		)
+		//We need to check again if our inputs changed (increased)
+
+		if prevInputCount != len(inputs) && !withoutChangeOutput {
+			withoutChangeOutput = true
+		}
+		prevInputCount = len(inputs)
+
+		if withoutChangeOutput {
+			maxSignedSize = txsizes.EstimateVirtualSize(
+				p2pkh, p2wpkh, nested, outputs, 0,
+			)
+		} else {
+			maxSignedSize = txsizes.EstimateVirtualSize(
+				p2pkh, p2wpkh, nested, outputs, changeSource.ScriptSize,
+			)
+		}
 		maxRequiredFee := txrules.FeeForSerializeSize(feeRatePerKb, maxSignedSize)
 		remainingAmount := inputAmount - targetAmount
 		if remainingAmount < maxRequiredFee {
@@ -148,8 +170,18 @@ func NewUnsignedTransaction(outputs []*wire.TxOut, feeRatePerKb btcutil.Amount,
 			return nil, err
 		}
 		change := wire.NewTxOut(int64(changeAmount), changeScript)
+
+		//add Changeoutput if our change is bigger than dust
+
+		if !txrules.IsDustOutput(change,
+			txrules.DefaultRelayFeePerKb) && withoutChangeOutput {
+			withoutChangeOutput = false
+			continue
+
+		}
+
 		if changeAmount != 0 && !txrules.IsDustOutput(change,
-			txrules.DefaultRelayFeePerKb) {
+			txrules.DefaultRelayFeePerKb) && !withoutChangeOutput {
 
 			l := len(outputs)
 			unsignedTransaction.TxOut = append(outputs[:l:l], change)

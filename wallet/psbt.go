@@ -198,6 +198,7 @@ func (w *Wallet) FundPsbt(packet *psbt.Packet, keyScope *waddrmgr.KeyScope,
 			// Ask the txauthor to create a transaction with our
 			// selected coins. This will perform fee estimation and
 			// add a change output if necessary.
+			fmt.Println("Fucking Go-TEST")
 			tx, err = txauthor.NewUnsignedTransaction(
 				txOut, feeSatPerKB, inputSource, changeSource,
 			)
